@@ -12,7 +12,7 @@ const userSchema = new Schema(
             lowercase : true,
             trim : true,
             index : true, 
-            //[Be careful this looses performances of the app if used more than necessary] make 'index' true if you want to enable searching on that field or (say) use this data in searching 
+            //[Be careful this looses performances of the app if used more than necessary] make 'index' true if you want to enable searching on that field or (say) use this data in frequent-searching 
         },
 
         userEmail : {
@@ -60,7 +60,7 @@ userSchema.pre('save', async function (next) { // Do a pre-thing before you actu
 
     if(!this.isModified('userPassword')) return next();
 
-    this.userPassword = bcrypt.hash(this.userPassword, 5);
+    this.userPassword = await bcrypt.hash(this.userPassword, 5);
     next();
 
     /*
