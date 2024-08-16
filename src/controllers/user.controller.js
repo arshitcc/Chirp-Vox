@@ -4,6 +4,20 @@ import { User } from "../models/user.models.js";
 import { uploadFile } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 
+const generateAccessAndRefreshTokens = async (user) => {
+    try {
+        // const user = await User.findById(user_id);
+        const accessToken = await user.generateAccessToken();
+        const refreshToken = await user.generateRefreshToken();
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave : false })
+        return {accessToken, refreshToken};
+
+    } catch (error) {
+        throw new ApiError(500,"!! Unable to generate Web Tokens !!");
+    }
+}
+
 const userSignup = asyncHandler(async (req, res) => {
    
     /* 
@@ -100,4 +114,105 @@ const userSignup = asyncHandler(async (req, res) => {
 
 })
 
-export { userSignup }
+const userLogin = asyncHandler( async (req, res) => {
+
+    /* 
+        1. Collect the data from front-end.
+        2. Validate all fields
+        3. Search for the username or userEmail in the backend and match the password.
+        3.1 As the password is encrypted. Bring the decrypted password
+        4. Work on errors like 'user not found', 'wrong password entered'.
+        5. Password Check
+        6. Generate Access Token and Refresh Token
+        7. Send secure cookies.
+    */
+
+    const {userName, userEmail, userPassword} = req.body;
+   
+    if(!userName && !userEmail){
+        throw new ApiError(400,'Enter a valid useremail or username');
+    } 
+
+    if(userPassword.trim() === ""){
+        throw new ApiError(400,'Please Fill all the fields');
+    }
+
+    const user = await User.findOne({
+        $or : [{userEmail}, {userName}]
+    })
+
+    if(!user){
+        throw new ApiError(401, `User doesn't exist`);
+    }
+
+    const isValidPassword = await user.isPasswordCorrect(userPassword);
+
+    if(!isValidPassword){
+        throw new ApiError(402,`Password didn't match`);
+    }
+
+    const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user);
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+    const options = {
+        httpOnly : true,
+        secure : true
+    }
+
+    return res.status(200)
+              .cookie('accessToken',accessToken,options)
+              .cookie('refreshToken',refreshToken,options)
+              .json(
+                new ApiResponse(
+                    200,
+                    {
+                        user : loggedInUser,
+                        accessToken,
+                        refreshToken
+                    },
+                    "User Logged In Successfully"
+                )
+              )
+
+    /* 
+        res.cookie('token_name', 'token_value', {
+            secure: true,           // Only send over HTTPS
+            httpOnly: true,         // Not accessible via JavaScript
+            sameSite: 'Lax',        // Protect against CSRF
+            domain: 'example.com',  // Available to the domain and subdomains
+            path: '/',              // Available across the site
+            maxAge: 3600000         // 1-hour expiration
+        });
+    */
+})
+
+const userLogout = asyncHandler( async (req,res) => {
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set : {
+                refreshToken : undefined
+            }
+        },
+        {
+            new : true
+        }
+    )
+
+    const options = {
+        httpOnly : true,
+        secure : true
+    }
+
+    return res.status(200)
+              .clearCookie('accessToken',options)
+              .clearCookie('refreshToken',options)
+              .json(
+                new ApiResponse(200,{},"User Logged Out Successfully")
+              )
+})
+
+
+
+export { userSignup, userLogin, userLogout }
