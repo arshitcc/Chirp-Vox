@@ -4,6 +4,7 @@ import { User } from "../models/user.models.js";
 import { uploadFile } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from 'jsonwebtoken'
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshTokens = async (user) => {
     try {
@@ -453,6 +454,62 @@ const getChannel = asyncHandler( async(req, res) => {
     
 })
 
+const getWatchHistory = asyncHandler(async (req, res) => {
+
+    const user = User.aggregate([
+        {
+            $match : {
+                _id : new mongoose.Types.ObjectId(req.user?._id)
+            }
+        },
+        {
+            $lookup : {
+                localField : 'userWatchHistory',
+                from : 'videos',
+                foreignField : 'videoOwner',
+                as : 'userWatchHistory',
+                pipeline : [
+                    {
+                        $lookup : {
+                            localField : 'videoOwner',
+                            from : 'users',
+                            foreignField : '_id',
+                            as : 'videoOwner',
+                            pipeline : [
+                                {
+                                    $project : {
+                                        userFullName : 1,
+                                        userName : 1,
+                                        userAvatar : 1,
+                                        userCoverImage : 1
+                                    }
+                                }
+                            ]
+                        } 
+                    },
+                    {
+                        $addFields : {
+                            videoOwner : {
+                                $first : '$videoOwner'
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    // console.log(user);
+    
+    return res.status(200)
+              .json(new ApiResponse(
+                200,
+                user[0].watchHistory,
+                "Watch History fetched Successfully"
+              )
+            )
+})
+
 export { 
     userSignup, 
     userLogin, 
@@ -462,6 +519,7 @@ export {
     updatePassword, 
     updateAccountDetails, 
     updateAvatar, 
-    updateCoverImage,
-    getChannel, 
+    updateCoverImage ,
+    getChannel,
+    getWatchHistory
 }
