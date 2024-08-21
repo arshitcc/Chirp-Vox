@@ -4,9 +4,11 @@ import {
     getCurrentUser, 
     getWatchHistory, 
     refreshAccessToken, 
-    updateAccountDetails, 
     updateAvatar, 
     updateCoverImage, 
+    updateEmail, 
+    updateFullName, 
+    updateHandle, 
     updatePassword, 
     userLogin, 
     userLogout, 
@@ -36,7 +38,9 @@ router.route('/login').post(userLogin);
 router.route('/logout').post(verifyJWT, userLogout);
 router.route('/refresh-token').post(refreshAccessToken);
 router.route('/update-password').post(verifyJWT, updatePassword);
-router.route('/update-account').post(verifyJWT,updateAccountDetails);
+router.route('/update-email').post(verifyJWT,updateEmail);
+router.route('/update-name').post(verifyJWT,updateFullName);
+router.route('/update-handle').post(verifyJWT,updateHandle);
 
 
 router.route('/update-avatar').patch(
