@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/apiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.models.js";
-import { uploadFile } from "../utils/cloudinary.js";
+import { uploadFile, deleteFile } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from 'jsonwebtoken'
 import mongoose from "mongoose";
@@ -80,7 +80,6 @@ const userSignup = asyncHandler(async (req, res) => {
 
 
     const userAvatar = await uploadFile(userAvatar_LocalPath);
-    console.log(`user controller : ${userAvatar}`);
     const userCoverImage = await uploadFile(userCoverImage_LocalPath); 
     // Already Applied check in utils if locally doesn't exists 
 
@@ -107,12 +106,6 @@ const userSignup = asyncHandler(async (req, res) => {
     return res.status(201).json(
         new ApiResponse(201,newUser,"User Registered Successfully !!")
     )
-    
-
-
-    console.log('userEmail : ',userEmail);
-    console.log('userName : ',userName);
-    console.log('userFullName : ',userFullName);
 
 })
 
@@ -135,7 +128,7 @@ const userLogin = asyncHandler( async (req, res) => {
         throw new ApiError(400,'Enter a valid useremail or username');
     } 
 
-    if(userPassword.trim() === ""){
+    if(!userPassword?.trim()){
         throw new ApiError(400,'Please Fill all the fields');
     }
 
@@ -193,8 +186,8 @@ const userLogout = asyncHandler( async (req,res) => {
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set : {
-                refreshToken : undefined
+            $unset : {
+                refreshToken : 1
             }
         },
         {
@@ -265,7 +258,7 @@ const updatePassword = asyncHandler( async(req, res) => {
     const {oldPassword, newPassword, confirmPassword} = req.body;
 
     if(
-        [oldPassword, newPassword, confirmPassword].some((field) => field.trim() === "")
+        [oldPassword, newPassword, confirmPassword].some((field) => field?.trim() === "")
     ){
         throw new ApiError(403,"Enter your OLD password");
     }
@@ -274,34 +267,81 @@ const updatePassword = asyncHandler( async(req, res) => {
         throw new ApiError(403, "Password didn't match.")
     }
 
-    const accessToken = req.cookies?.accessToken || req.headers("Authorization")?.replace("Bearer ","");
-    const myToken = jwt.verify(accessToken,process.env.ACCESS_TOKEN_SECRET);
-    if(!myToken){
-        throw new ApiError(403, "Unauthorized Token");
-    }
-    const user = await User.findById(myToken._id);
-    if(!user){
-        throw new ApiError(403, "Unauthorized User");
-    }
-
-    const isValidPassword = await user.isPasswordCorrect(oldPassword);
+    const isValidPassword = await req.user.isPasswordCorrect(oldPassword);
     if(!isValidPassword){
         throw new ApiError(403, "Wrong Password !!");
     }
 
-    user.userPassword = newPassword;
-    user.save({validateBeforeSave : false});
+    req.user.userPassword = newPassword;
+    req.user.save();
 
     return res.status(200)
               .json(new ApiResponse(200,{},"Password Changed Successfully"))
 
 })
 
-const updateAccountDetails = asyncHandler( async(req, res) => {
+const updateFullName = asyncHandler( async(req, res) => {
     
     // verify JWT
-    const {userFullName, userEmail} = req.body;
-    if(!userFullName || !userEmail){
+    const {newFullName} = req.body;
+    if(!newFullName?.trim()){
+        throw new ApiError(401, "Please Enter the fields.")
+    }
+
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set : {
+                userFullName : newFullName?.trim()
+            }
+        },
+        {
+            new : true
+        }
+    ).select('-userPassword')
+    
+    return res.status(200)
+              .json(
+                new ApiResponse(200, user, "!! Account details Updated Successfully !!")
+              )
+})
+
+const updateHandle = asyncHandler( async(req, res) => {
+    
+    // verify JWT
+    const {newHandle} = req.body;
+    if(!newHandle?.trim()){
+        throw new ApiError(401, "Please Enter all the fields.")
+    }
+
+    if(await User.findOne({userName : newHandle})){
+        throw new ApiError(402,"!! username already taken. try another !!")
+    }    
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set : {
+                userName : newHandle?.trim().toLowerCase(),
+            }
+        },
+        {
+            new : true
+        }
+    ).select('-userPassword')
+    
+    return res.status(200)
+              .json(
+                new ApiResponse(200, user, "!! Account details Updated Successfully !!")
+              )
+})
+
+const updateEmail = asyncHandler( async(req, res) => {
+    
+    // verify JWT
+    const {newEmail} = req.body;
+    if(!newEmail?.trim()){
         throw new ApiError(401, "Please Enter all the fields.")
     }
 
@@ -310,8 +350,7 @@ const updateAccountDetails = asyncHandler( async(req, res) => {
         req.user?._id,
         {
             $set : {
-                userEmail,
-                userFullName
+                userEmail : newEmail?.trim().toLowerCase(),
             }
         },
         {
@@ -327,13 +366,19 @@ const updateAccountDetails = asyncHandler( async(req, res) => {
 
 const updateAvatar = asyncHandler( async(req, res) => {
 
-    // TODO : Remove Old avatar from cloudinary. Make a utility
-
     const newAvatar_LocalPath = req.file?.path || "";
     const newAvatar = (newAvatar_LocalPath !== "")? await uploadFile(newAvatar_LocalPath) : "";
 
-    if(newAvatar === "" || !newAvatar.url){
+    if(!newAvatar?.url.trim()){
         throw new ApiError(402, "Images not found");
+    }
+
+    const oldAvatar = req.user?.userAvatar || "";
+    if(oldAvatar){
+        const isDeleted = await deleteFile(oldAvatar);
+        if(!isDeleted){
+            throw new ApiError(501,"!! Profile Image didn't got Deleted !!");
+        }
     }
 
     const user = await User.findByIdAndUpdate(
@@ -341,7 +386,6 @@ const updateAvatar = asyncHandler( async(req, res) => {
         {
             $set : {
                 userAvatar : newAvatar.url,
-
             }
         },
         {
@@ -357,13 +401,19 @@ const updateAvatar = asyncHandler( async(req, res) => {
 
 const updateCoverImage = asyncHandler( async(req, res) => {
     
-    // TODO : Remove Old avatar from cloudinary. Make a utility
-
     const newCoverImage_LocalPath = req.file?.path || "";
     const newCoverImage = (newCoverImage_LocalPath !== "")? await uploadFile(newCoverImage_LocalPath) : "";
 
-    if(newCoverImage === "" || !newCoverImage.url){
+    if(!newCoverImage?.url){
         throw new ApiError(402, "Cover Image not found");
+    }
+
+    const oldCoverImage = req.user?.userAvatar || "";
+    if(oldCoverImage){
+        const isDeleted = await deleteFile(oldCoverImage);
+        if(!isDeleted){
+            throw new ApiError(501,"!! Cover Image didn't got Deleted !!");
+        }
     }
 
     const user = await User.findByIdAndUpdate(
@@ -387,7 +437,7 @@ const updateCoverImage = asyncHandler( async(req, res) => {
 const getChannel = asyncHandler( async(req, res) => {
     
     const {userName} = req.params;
-    if(!userName || userName.trim()===""){
+    if(!userName?.trim()){
         throw new ApiError(401, "Invalid Channel Name");
     }
 
@@ -517,7 +567,9 @@ export {
     refreshAccessToken, 
     getCurrentUser, 
     updatePassword, 
-    updateAccountDetails, 
+    updateEmail, 
+    updateFullName, 
+    updateHandle,
     updateAvatar, 
     updateCoverImage ,
     getChannel,
