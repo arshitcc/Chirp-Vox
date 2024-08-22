@@ -31,7 +31,25 @@ const uploadFile = async (localFilePath) => {
     }
 }
 
-export { uploadFile }
+const deleteFile = async (oldAsset) => {
+    
+    if(!oldAsset) return ;
+    const regex = /upload\/(?:v\d+\/)?([^\/]+)\./;
+    const match = oldAsset.match(regex);
+    const public_id = match ? match[1] : null;
+    if (public_id) {
+        try {
+            await cloudinary.uploader.destroy(public_id, {resource_type : 'image'});
+            return true
+        } 
+        catch (error) {
+            return false;
+        }
+    }
+    return  false;
+}
+
+export { uploadFile, deleteFile }
 
 /* 
     (async function() {
