@@ -7,15 +7,19 @@ const likeSchema = new Schema(
             ref : 'User',
             required : true
         },
-        content_type : {
-            type : String,
-            enum : ['Video','Comment','Playlist','Tweet'],
-            required : true
-        },
-        content_id : {
+        liked_comment : {
             type : Schema.Types.ObjectId,
-            required : true
+            ref : 'Comment',
         },
+        liked_video : {
+            type : Schema.Types.ObjectId,
+            ref : 'Video',
+        },
+        liked_tweet : {
+            type : Schema.Types.ObjectId,
+            ref : 'Tweet',
+        },
+        
     },
     {
         timestamps : true

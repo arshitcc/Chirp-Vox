@@ -11,12 +11,7 @@ const tweetSchema = new Schema(
             required : true,
             trim : true,
         },
-        tweet_files : [
-            {
-                type : String,
-                trim : true,
-            }
-        ]
+        
     },
     {
         timestamps : true
