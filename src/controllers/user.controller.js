@@ -61,29 +61,22 @@ const userSignup = asyncHandler(async (req, res) => {
         throw new ApiError(401,"User with same username or useremail Already Exists");
     }
 
-    // const userAvatar_LocalPath = req.files?.userAvatar[0]?.path ;
     let userAvatar_LocalPath;
     if (req.files && (req.files.userAvatar) && req.files.userAvatar.length > 0) {
         userAvatar_LocalPath = req.files.userAvatar[0].path
     }
-    // console.log(userAvatar_LocalPath);
     if(!userAvatar_LocalPath) {
         throw new ApiError(400,'Profile Image is Requried!!');
     }
-
     
     let userCoverImage_LocalPath;
-    if (req.files && (req.files.coverImage) && req.files.coverImage.length > 0) {
-        userCoverImage_LocalPath = req.files.coverImage[0].path
+    if (req.files && (req.files.userCoverImage) && req.files.userCoverImage.length > 0) {
+        userCoverImage_LocalPath = req.files.userCoverImage[0].path
     }
-    // const userCoverImage_LocalPath = req.files?.userCoverImage[0]?.path
-
 
     const userAvatar = await uploadFile(userAvatar_LocalPath);
     const userCoverImage = await uploadFile(userCoverImage_LocalPath); 
-    // Already Applied check in utils if locally doesn't exists 
 
-    // Another check if anything goes wrong in uploading and if you uploaded null in DB, DataBase is gonna crash.
     if(!userAvatar) throw new ApiError(400, 'Profile Image is Required !!');
 
     const user = await User.create({
@@ -101,7 +94,6 @@ const userSignup = asyncHandler(async (req, res) => {
     if(!newUser){
         throw new ApiError(500,'Something Went Wrong !! User not created !!');
     }
-    console.log(newUser);
     
     return res.status(201).json(
         new ApiResponse(201,newUser,"User Registered Successfully !!")
@@ -459,7 +451,7 @@ const getChannel = asyncHandler( async(req, res) => {
             $lookup : {
                 from : 'subscriptions',
                 localField : "_id",
-                foreignField : "",
+                foreignField : "subscriber",
                 as : "subscribedTo"
             }
         },
@@ -509,15 +501,15 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     const user = User.aggregate([
         {
             $match : {
-                _id : new mongoose.Types.ObjectId(req.user?._id)
+                _id : new mongoose.Types.ObjectId(req.user?._id) // can't send req.user._id as it is not actual MongoDB ID.
             }
         },
         {
             $lookup : {
                 localField : 'userWatchHistory',
                 from : 'videos',
-                foreignField : 'videoOwner',
-                as : 'userWatchHistory',
+                foreignField : '_id',
+                as : 'watchHistory',
                 pipeline : [
                     {
                         $lookup : {
