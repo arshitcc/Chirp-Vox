@@ -1,5 +1,6 @@
 import {v2 as cloudinary} from 'cloudinary'
 import fs from 'fs'  // file-system manager from node.js apply operations on file to read, write, unlink, copy, etc.
+import { ApiError } from './apiError.js';
 
 
 cloudinary.config({ 
@@ -15,18 +16,11 @@ const uploadFile = async (localFilePath) => {
             resource_type : 'auto'
         });
         
-        console.log('File has been uploaded successfully on Cloudinary !!');
-        console.log("X",uploadResult); // uploadResult.url
-        fs.unlinkSync(localFilePath); // File is successfully uploaded on Cloudinary. Remove it locally
+        fs.unlinkSync(localFilePath); // File has been successfully uploaded on . Remove it locally
         return uploadResult;
 
     } catch (error) {
-        // First file is upoaded on local-server.
-        // If file got corrupted while uploading, then remove that mallicious-file from system
-
         fs.unlinkSync(localFilePath);
-        // remove the locally saved temporary file as the upload-operation got failed
-        
         return null;
     }
 }
@@ -34,16 +28,18 @@ const uploadFile = async (localFilePath) => {
 const deleteFile = async (oldAsset) => {
     
     if(!oldAsset) return ;
-    const regex = /upload\/(?:v\d+\/)?([^\/]+)\./;
+    const regex = /\/(image|video|raw)\/upload\/(?:v\d+\/)?([^\/]+)\./;
     const match = oldAsset.match(regex);
-    const public_id = match ? match[1] : null;
-    if (public_id) {
+    
+    const resource_type = match ? match[1] : null;
+    const public_id = match ? match[2] : null;
+    if (public_id && resource_type) {
         try {
-            await cloudinary.uploader.destroy(public_id, {resource_type : 'image'});
+            await cloudinary.uploader.destroy(public_id, {resource_type});
             return true
         } 
         catch (error) {
-            return false;
+            throw new ApiError(501, `System failed to delete media from Vendor !!`);
         }
     }
     return  false;
