@@ -111,7 +111,7 @@ const getVideo = asyncHandler( async(req,res) => {
                 isLiked : {
                     $cond : {
                         if : {
-                            $in : [req.user._id,'$liked']
+                            $in : [req.user._id,'$liked.liked_by']
                         },
                         then : true,
                         else : false
@@ -120,7 +120,7 @@ const getVideo = asyncHandler( async(req,res) => {
                 isSubscribed : {
                     $cond : {
                         if : {
-                            $in : [req.user._id, '$subscribed']
+                            $in : [req.user._id, '$subscribed.subscriber']
                         },
                         then : true,
                         else : false
