@@ -1,5 +1,4 @@
 import mongoose, { isValidObjectId } from "mongoose";
-import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 import { User } from "../models/user.models.js";
 import { Video } from '../models/video.models.js'
 import { Like } from "../models/likes.models.js";
@@ -11,7 +10,102 @@ import {asyncHandler} from '../utils/asyncHandler.js'
 
 const getAllVideos = asyncHandler( async(req,res) => {
 
-})
+    const { page = 1, limit = 10, search_query, sortBy, sortType, userId } = req.query;
+    const pipeline = [];
+    const searchPipeline = [];
+
+    if (search_query) {
+        searchPipeline.push(
+            {
+                $search: {
+                    index: 'default',
+                    text: {
+                        query: search_query,
+                        path: ['videoTitle', 'videoDescription'],
+                    },
+                },
+            }
+        );
+    }
+    
+    const searchResults = await Video.aggregate(searchPipeline).exec();        
+    const videoIds = searchResults.map(video => video._id);
+
+    // NOTE : The $search operation is handled first, ensuring it's isolated from any conflicting stages.
+    //         That's why seperate pipelines are used to manage this
+
+    let found = true;
+
+    if (videoIds.length > 0){
+        pipeline.push(
+            {
+                $match: {
+                    _id: { $in: videoIds },
+                    isPublished: true,
+                },
+            }
+        )
+    }
+    else found = false;
+
+    pipeline.push(
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'videoOwner',
+                foreignField: '_id',
+                as: 'owner',
+                pipeline: [
+                    {
+                        $project: {
+                            userName: 1,
+                            userFullName: 1,
+                            userAvatar: 1,
+                        },
+                    },
+                ],
+            },
+        },
+        { $unwind: '$owner' },
+    );
+
+    if (sortBy && sortType) {
+        pipeline.push(
+            {
+                $sort: {
+                    [sortBy]: sortType === 'asc' ? 1 : -1,
+                },
+            }
+        );
+    } 
+    else {
+        pipeline.push(
+            {
+                $sort: {
+                    createdAt: -1,
+                },
+            }
+        );
+    }
+
+    const options = {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+    }
+
+    const videos = await Video.aggregatePaginate(Video.aggregate(pipeline), options);
+
+    if (!videos) {
+        throw new ApiError(500, `Failed to load videos`);
+    }
+
+    if(!videos.docs.length) found = false;
+
+    return res.status(200)
+              .json(
+                new ApiResponse(200, {found, ...videos}, `Videos fetched successfully for page: ${page}`)
+              );
+    })
 
 const publishVideo = asyncHandler( async(req,res) => {
     const {videoTitle, videoDescription} = req.body;
@@ -323,6 +417,7 @@ const togglePublishStatus = asyncHandler( async(req,res) => {
 })
 
 export {
+    getAllVideos,
     publishVideo,
     getVideo,
     updateVideoDetails,

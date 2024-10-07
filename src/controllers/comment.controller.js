@@ -15,7 +15,7 @@ const getComments = asyncHandler( async(req,res) => {
         throw new ApiError(400, `Invalid Video`);
     }
     
-    const myComments = Comment.aggregate([
+    const commentAggregate = Comment.aggregate([
         {
             $match: {
                 video: new mongoose.Types.ObjectId(videoId)
@@ -80,7 +80,7 @@ const getComments = asyncHandler( async(req,res) => {
     };
 
     const comments = await Comment.aggregatePaginate(
-        myComments,
+        commentAggregate,
         options
     );
 
